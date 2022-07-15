@@ -32,17 +32,18 @@ If you haven't run away screaming yet, maybe that's what you're looking for. Jus
 But really, I wrote this just for fun and I haven't written any tests yet and neither have I tested all edge cases.
 The export being named `SafeFunction` is really just ambitious.
 
-However, if you found a way to break out of `SafeFunction` and did something to the outside JS environment, let me
-know and file an issue. I'm curious to see how far `evalish` would have to go to fully faux-isolate eval'ed code!
+[**However, if you found a way to break out of `SafeFunction` and did something to the outside JS environment, let me
+know and file an issue.**](https://github.com/kitten/evalish/issues/new)
+I'm curious to see how far `evalish` would have to go to fully faux-isolate eval'ed code!
 
 ## Usage
 
 First install `evalish` alongside `react`:
 
 ```sh
-yarn add use-editable
+yarn add evalish
 # or
-npm install --save use-editable
+npm install --save evalish
 ```
 
 You'll then be able to import `SafeFunction` and pass it argument names and code,
