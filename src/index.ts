@@ -141,6 +141,7 @@ function makeSafeGlobal() {
     } catch (_error) {
       // When we're unsuccessful we revert to the original `globalThis`
       vmGlobals = trueGlobal;
+    } finally {
       if (iframe) iframe.remove();
     }
   }
@@ -160,14 +161,7 @@ function makeSafeGlobal() {
   // We also reset all ignored keys explicitly
   for (const key in ignore) safeGlobal[key] = undefined;
   // Lastly, we also disallow certain property accesses on the safe global
-  safeGlobal = withProxy(safeGlobal!);
-
-  // We're now free to remove the iframe element, if we've used it
-  if (iframe) {
-    iframe.remove();
-  }
-
-  return safeGlobal;
+  return (safeGlobal = withProxy(safeGlobal!));
 }
 
 interface SafeFunction {
