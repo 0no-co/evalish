@@ -13,6 +13,7 @@ const ignore = {
   global: true,
   undefined: true,
   require: true,
+  Function: true,
   eval: true,
   module: true,
   exports: true,
