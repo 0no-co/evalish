@@ -1,10 +1,3 @@
-// These are marked with `Symbol.unscopables` for the Proxy
-const unscopables = {
-  __proto__: true,
-  prototype: true,
-  constructor: true,
-};
-
 // Keys that'll always not be included (for Node.js)
 const ignore = {
   sys: true,
@@ -30,73 +23,51 @@ type Object = Record<string | symbol, unknown>;
 function safeKey(target: Object, key: string | symbol): string | undefined {
   return key !== 'constructor' &&
     key !== '__proto__' &&
-    key !== 'constructor' &&
+    key !== 'prototype' &&
     typeof key !== 'symbol' &&
     key in target
     ? key
     : undefined;
 }
 
-// Wrap any given target with a Proxy preventing access to unscopables
-function withProxy(target: any) {
+// Wrap any given target with a masking object preventing access to prototype properties
+function mask(target: any) {
   if (
     target == null ||
     (typeof target !== 'function' && typeof target !== 'object')
   ) {
     // If the target isn't a function or object then skip
     return target;
-  } else if (
-    typeof Proxy === 'function' &&
-    typeof Symbol === 'function' &&
-    Symbol.unscopables
-  ) {
-    // Mark hidden keys as unscopable
-    target[Symbol.unscopables] = unscopables;
-    // Wrap the target in a Proxy that disallows access to some keys
-    return new Proxy(target, {
-      // Return a value, if it's allowed to be returned, and wrap that value in a proxy recursively
-      get(target, _key) {
-        const key = safeKey(target, _key);
-        return key !== undefined ? withProxy(target[key]) : undefined;
-      },
-      has(target, key) {
-        return !!safeKey(target, key);
-      },
-      set: noop,
-      deleteProperty: noop,
-      defineProperty: noop,
-      getOwnPropertyDescriptor: noop,
-    });
   }
-
   // Create a stand-in object or function
   const standin =
     typeof target === 'function'
-      ? function (this: any) {
+      ? (function (this: any) {
           return target.apply(this, arguments);
-        }
+        })
       : Object.create(null);
   // Copy all known keys over to the stand-in and recursively apply `withProxy`
   // Prevent unsafe keys from being accessed
-  const keys = ['constructor', 'prototype', '__proto__'].concat(
-    Object.getOwnPropertyNames(target)
-  );
+  const keys = Object.getOwnPropertyNames(target)
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    Object.defineProperty(standin, key, {
-      enumerable: true,
-      get: safeKey(target, key)
-        ? () => {
-            return typeof target[key] === 'function' ||
-              typeof target[key] === 'object'
-              ? withProxy(target[key])
-              : target[key];
-          }
-        : noop,
-    });
+    if (key !== 'prototype') {
+      Object.defineProperty(standin, key, {
+        enumerable: true,
+        get: safeKey(target, key)
+          ? () => {
+              return typeof target[key] === 'function' ||
+                typeof target[key] === 'object'
+                ? mask(target[key])
+                : target[key];
+            }
+          : noop,
+      });
+    }
   }
-
-  return standin;
+  return typeof Object.freeze === 'function'
+    ? Object.freeze(standin)
+    : standin;
 }
 
 let safeGlobal: Record<string | symbol, unknown> | void;
@@ -153,7 +124,7 @@ function makeSafeGlobal() {
   // certain key accesses
   for (let i = 0, l = trueGlobalKeys.length; i < l; i++) {
     const key = trueGlobalKeys[i];
-    safeGlobal[key] = withProxy(vmGlobals[key]);
+    safeGlobal[key] = mask(vmGlobals[key]);
   }
 
   // We then reset all globals that are present on `globalThis` directly
@@ -163,7 +134,7 @@ function makeSafeGlobal() {
   // It _might_ be safe to expose the Function constructor like this... who knows
   safeGlobal!.Function = SafeFunction;
   // Lastly, we also disallow certain property accesses on the safe global
-  return (safeGlobal = withProxy(safeGlobal!));
+  return (safeGlobal = mask(safeGlobal!));
 }
 
 interface SafeFunction {
