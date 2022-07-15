@@ -2,7 +2,7 @@
   "name": "evalish",
   "description": "A maybe slightly safer-ish wrapper around eval Function constructors",
   "DISCLAIMER": "Please maybe try something else first.. Please.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "dist/evalish.js",
   "module": "dist/evalish.mjs",
   "types": "dist/types/index.d.ts",
