@@ -160,6 +160,8 @@ function makeSafeGlobal() {
   for (const key in trueGlobal) safeGlobal[key] = undefined;
   // We also reset all ignored keys explicitly
   for (const key in ignore) safeGlobal[key] = undefined;
+  // It _might_ be safe to expose the Function constructor like this... who knows
+  safeGlobal!.Function = SafeFunction;
   // Lastly, we also disallow certain property accesses on the safe global
   return (safeGlobal = withProxy(safeGlobal!));
 }
