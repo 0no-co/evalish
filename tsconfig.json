@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "types": [],
+    "baseUrl": "./",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUnusedLocals": true,
+    "noEmit": true,
+    "lib": ["dom", "esnext"],
+    "module": "es2015",
+    "moduleResolution": "node",
+    "target": "esnext",
+    "strict": true,
+    "noImplicitAny": false,
+    "noUnusedParameters": true
+  }
+}
