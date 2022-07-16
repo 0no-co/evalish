@@ -81,6 +81,7 @@ function mask(target: any) {
 }
 
 let safeGlobal: Record<string | symbol, unknown> | void;
+let vmGlobals: Record<string | symbol, unknown> = {};
 
 function makeSafeGlobal() {
   if (safeGlobal) {
@@ -101,7 +102,7 @@ function makeSafeGlobal() {
 
   // When we're in the browser, we can go a step further and try to create a
   // new JS context and globals in a separate iframe
-  let vmGlobals = trueGlobal;
+  vmGlobals = trueGlobal;
   let iframe: HTMLIFrameElement | void;
   if (typeof document !== 'undefined') {
     try {
@@ -176,10 +177,15 @@ function SafeFunction(...args: string[]): Function {
   const safeGlobal = makeSafeGlobal();
   const code = args.pop();
 
+  // Retrieve Function constructor from vm globals
+  const Function = vmGlobals.Function as FunctionConstructor | void;
+  const Object = vmGlobals.Object as ObjectConstructor;
+  const createFunction = (Function || Object.constructor.constructor) as FunctionConstructor;
+
   // We pass in our safe global and use it using `with` (ikr...)
   // We then add a wrapper function for strict-mode and a few closing
   // statements to prevent the code from escaping the `with` block;
-  const fn = new Function(
+  const fn = createFunction(
     'globalThis',
     ...args,
     'with (globalThis) {\n"use strict";\nreturn (function () {\n' +
