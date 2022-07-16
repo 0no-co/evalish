@@ -25,8 +25,8 @@ on a string. As `Function` by default is a little safer than `eval` and runs eve
 
 It only does three simple things:
 - Isolate the [global object](https://developer.mozilla.org/en-US/docs/Glossary/Global_object) and uses a separate object using a `with` statement
-- Wraps all passed through globals, like `Array`, in a recursive masking object that disallows access to prototype-polluting propeties, such as `constructor`
-- In the browser: Creates an `iframe` element and uses that frame's globals instead
+- Wraps all passed through globals, like `Array`, in a recursive masking object that disallows access to object prototype properties
+- In the browser: Creates an `iframe` element and uses that frame's globals instead to prvent prototype pollution.
 
 If you haven't run away screaming yet, maybe that's what you're looking for. Just a bit more safety.
 But really, I wrote this just for fun and I haven't written any tests yet and neither have I tested all edge cases.
