@@ -10,6 +10,7 @@ const ignore = {
   eval: true,
   module: true,
   exports: true,
+  makeSafeGlobal: true,
   __filename: true,
   __dirname: true,
   console: true,
@@ -51,7 +52,10 @@ function mask(target: any) {
   const keys = Object.getOwnPropertyNames(target)
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    if (key !== 'prototype') {
+    if (
+      key !== 'prototype' &&
+      (typeof standin !== 'function' || (key !== 'arguments' && key !== 'caller'))
+    ) {
       Object.defineProperty(standin, key, {
         enumerable: true,
         get: safeKey(target, key)
@@ -134,7 +138,27 @@ function makeSafeGlobal() {
   // It _might_ be safe to expose the Function constructor like this... who knows
   safeGlobal!.Function = SafeFunction;
   // Lastly, we also disallow certain property accesses on the safe global
-  return (safeGlobal = mask(safeGlobal!));
+  // Wrap any given target with a Proxy preventing access to unscopables
+  if (typeof Proxy === 'function') {
+    // Wrap the target in a Proxy that disallows access to some keys
+    return (safeGlobal = new Proxy(safeGlobal!, {
+      // Return a value, if it's allowed to be returned and mask this value
+      get(target, _key) {
+        const key = safeKey(target, _key);
+        return key !== undefined ? target[key] : undefined;
+      },
+      has(_target, _key) {
+        return true;
+      },
+      set: noop,
+      deleteProperty: noop,
+      defineProperty: noop,
+      getOwnPropertyDescriptor: noop,
+    }));
+  } else {
+    // NOTE: Some property accesses may leak through here without the Proxy
+    return (safeGlobal = mask(safeGlobal));
+  }
 }
 
 interface SafeFunction {
