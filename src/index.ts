@@ -31,6 +31,12 @@ function safeKey(target: Object, key: string | symbol): string | undefined {
     : undefined;
 }
 
+function freeze(target: Object): Object {
+  return typeof Object.freeze === 'function'
+    ? Object.freeze(target)
+    : target;
+}
+
 // Wrap any given target with a masking object preventing access to prototype properties
 function mask(target: any) {
   if (
@@ -49,7 +55,7 @@ function mask(target: any) {
       : Object.create(null);
   // Copy all known keys over to the stand-in and recursively apply `withProxy`
   // Prevent unsafe keys from being accessed
-  const keys = Object.getOwnPropertyNames(target)
+  const keys = ['__proto__', 'constructor'].concat(Object.getOwnPropertyNames(target));
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
     if (
@@ -69,9 +75,9 @@ function mask(target: any) {
       });
     }
   }
-  return typeof Object.freeze === 'function'
-    ? Object.freeze(standin)
-    : standin;
+  if (standin.prototype != null)
+    standin.prototype = freeze(Object.create(null));
+  return freeze(standin);
 }
 
 let safeGlobal: Record<string | symbol, unknown> | void;
