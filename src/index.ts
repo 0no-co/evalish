@@ -60,7 +60,7 @@ function mask(target: any) {
     // Chromium already restricts access to certain globals in an
     // iframe, this try catch block is to avoid
     // "Failed to enumerate the properties of 'Storage': access is denied for this document"
-    keys.concat(Object.getOwnPropertyNames(target));
+    keys.push(...Object.getOwnPropertyNames(target));
   } catch (e) {}
 
   for (let i = 0; i < keys.length; i++) {
