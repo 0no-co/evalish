@@ -55,7 +55,14 @@ function mask(target: any) {
       : Object.create(null);
   // Copy all known keys over to the stand-in and recursively apply `withProxy`
   // Prevent unsafe keys from being accessed
-  const keys = ['__proto__', 'constructor'].concat(Object.getOwnPropertyNames(target));
+  const keys = ["__proto__", "constructor"];
+  try {
+    // Chromium already restricts access to certain globals in an
+    // iframe, this try catch block is to avoid
+    // "Failed to enumerate the properties of 'Storage': access is denied for this document"
+    keys.push(...Object.getOwnPropertyNames(target));
+  } catch (e) {}
+
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
     if (
