@@ -25,6 +25,7 @@ const _getOwnPropertyNames = Object.getOwnPropertyNames;
 const _getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const _defineProperty = Object.defineProperty;
 const _create = Object.create;
+const _slice = Array.prototype.slice;
 
 type Object = Record<string | symbol, unknown>;
 
@@ -75,7 +76,9 @@ function mask(target: any, toplevel: boolean) {
           if (new.target === undefined) {
             return target.apply(this, arguments);
           } else {
-            return new (target.bind.apply(target, arguments));
+            const args = _slice.call(arguments);
+            args.unshift(null);
+            return new (target.bind.apply(target, args));
           }
         })
       : _create(null);
@@ -131,7 +134,7 @@ function mask(target: any, toplevel: boolean) {
     standin.prototype = _create(null);
   }
 
-  return freeze(standin);
+  return toplevel ? standin : freeze(standin);
 }
 
 let safeGlobal: Record<string | symbol, unknown> | void;
@@ -208,7 +211,26 @@ function makeSafeGlobal() {
 
   // Lastly, we also disallow certain property accesses on the safe global
   // Wrap any given target with a Proxy preventing access to unscopables
-  return freeze(safeGlobal!);
+  if (typeof Proxy === 'function') {
+    // Wrap the target in a Proxy that disallows access to some keys
+    return (safeGlobal = new Proxy(safeGlobal!, {
+      // Return a value, if it's allowed to be returned and mask this value
+      get(target, _key) {
+        const key = safeKey(target, _key);
+        return !ignore[_key] && key !== undefined ? target[key] : undefined;
+      },
+      has(_target, _key) {
+        return true;
+      },
+      set: noop,
+      deleteProperty: noop,
+      defineProperty: noop,
+      getOwnPropertyDescriptor: noop,
+    }));
+  } else {
+    // NOTE: Some property accesses may leak through here without the Proxy
+    return freeze(safeGlobal!);
+  }
 }
 
 interface SafeFunction {
