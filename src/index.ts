@@ -18,6 +18,13 @@ const ignore = {
 };
 
 const noop = function () {} as any;
+const _freeze = Object.freeze;
+const _seal = Object.seal;
+const _keys = Object.keys;
+const _getOwnPropertyNames = Object.getOwnPropertyNames;
+const _getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const _defineProperty = Object.defineProperty;
+const _create = Object.create;
 
 type Object = Record<string | symbol, unknown>;
 
@@ -33,13 +40,15 @@ function safeKey(target: Object, key: string | symbol): string | undefined {
 }
 
 function freeze(target: Object): Object {
-  return typeof Object.freeze === 'function'
-    ? Object.freeze(target)
-    : target;
+  try { _freeze(target); } catch (_error) {}
+  try { _seal(target); } catch (_error) {}
+  return target;
 }
 
+const masked = new Set();
+
 // Wrap any given target with a masking object preventing access to prototype properties
-function mask(target: any) {
+function mask(target: any, toplevel: boolean) {
   if (
     target == null ||
     (typeof target !== 'function' && typeof target !== 'object')
@@ -47,13 +56,31 @@ function mask(target: any) {
     // If the target isn't a function or object then skip
     return target;
   }
+
+  if (!('constructor' in target)) {
+    toplevel = false;
+  }
+
+  if (toplevel && masked.has(target)) {
+    return target;
+  } else if (toplevel) {
+    masked.add(target);
+  }
+
   // Create a stand-in object or function
-  const standin =
-    typeof target === 'function'
+  let standin = target;
+  if (!toplevel) {
+    standin = typeof target === 'function'
       ? (function (this: any) {
-          return target.apply(this, arguments);
+          if (new.target === undefined) {
+            return target.apply(this, arguments);
+          } else {
+            return new (target.bind.apply(target, arguments));
+          }
         })
-      : Object.create(null);
+      : _create(null);
+  }
+
   // Copy all known keys over to the stand-in and recursively apply `withProxy`
   // Prevent unsafe keys from being accessed
   const keys = ["__proto__", "constructor"];
@@ -61,30 +88,49 @@ function mask(target: any) {
     // Chromium already restricts access to certain globals in an
     // iframe, this try catch block is to avoid
     // "Failed to enumerate the properties of 'Storage': access is denied for this document"
-    keys.push(...Object.getOwnPropertyNames(target));
-  } catch (e) {}
+    keys.push(..._getOwnPropertyNames(target));
+  } catch (_error) {
+    keys.push(..._keys(target));
+  }
 
+  const seen = new Set();
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    if (
+    if (seen.has(key)) {
+      continue;
+    } else if (
       key !== 'prototype' &&
       (typeof standin !== 'function' || (key !== 'arguments' && key !== 'caller'))
     ) {
-      Object.defineProperty(standin, key, {
-        enumerable: true,
-        get: safeKey(target, key)
-          ? () => {
-              return typeof target[key] === 'function' ||
-                typeof target[key] === 'object'
-                ? mask(target[key])
-                : target[key];
+      seen.add(key);
+      const descriptor = _getOwnPropertyDescriptor(standin, key) || {};
+      if (descriptor.configurable) {
+        _defineProperty(standin, key, {
+          enumerable: descriptor.enumerable,
+          configurable: descriptor.configurable,
+          get: (() => {
+            if (!safeKey(target, key)) {
+              return noop;
+            } if (toplevel) {
+              try {
+                const value = mask(target[key], false);
+                return () => value;
+              } catch (_error) {
+                return noop;
+              }
+            } else {
+              return () => mask(target[key], false);
             }
-          : noop,
-      });
+          })(),
+        });
+      }
     }
   }
-  if (standin.prototype != null)
-    standin.prototype = freeze(Object.create(null));
+
+  if (standin.prototype != null) {
+    standin.prototype = _create(null);
+  }
+
   return freeze(standin);
 }
 
@@ -104,7 +150,7 @@ function makeSafeGlobal() {
 
   // Get all available global names on `globalThis` and remove keys that are
   // explicitly ignored
-  const trueGlobalKeys = Object.getOwnPropertyNames(trueGlobal).filter(
+  const trueGlobalKeys = _getOwnPropertyNames(trueGlobal).filter(
     key => !ignore[key]
   );
 
@@ -123,7 +169,7 @@ function makeSafeGlobal() {
       document.head.appendChild(iframe);
       // We copy over all known globals (as seen on the original `globalThis`)
       // from the new global we receive from the iframe
-      vmGlobals = Object.create(null);
+      vmGlobals = _create(null);
       for (let i = 0, l = trueGlobalKeys.length; i < l; i++) {
         const key = trueGlobalKeys[i];
         vmGlobals[key] = iframe.contentWindow![key];
@@ -134,16 +180,23 @@ function makeSafeGlobal() {
     } finally {
       if (iframe) iframe.remove();
     }
+  } else if (typeof require === 'function') {
+    vmGlobals = _create(null);
+    const scriptGlobal = new (require('vm').Script)('exports = globalThis').runInNewContext({}).exports;
+    for (let i = 0, l = trueGlobalKeys.length; i < l; i++) {
+      const key = trueGlobalKeys[i];
+      vmGlobals[key] = scriptGlobal[key];
+    }
   }
 
-  safeGlobal = Object.create(null);
+  safeGlobal = _create(null);
 
   // The safe global is initialised by copying all values from either `globalThis`
   // or the isolated global. They're wrapped using `withProxy` which further disallows
   // certain key accesses
   for (let i = 0, l = trueGlobalKeys.length; i < l; i++) {
     const key = trueGlobalKeys[i];
-    safeGlobal[key] = mask(vmGlobals[key]);
+    safeGlobal[key] = mask(vmGlobals[key], true);
   }
 
   // We then reset all globals that are present on `globalThis` directly
@@ -152,28 +205,10 @@ function makeSafeGlobal() {
   for (const key in ignore) safeGlobal[key] = undefined;
   // It _might_ be safe to expose the Function constructor like this... who knows
   safeGlobal!.Function = SafeFunction;
+
   // Lastly, we also disallow certain property accesses on the safe global
   // Wrap any given target with a Proxy preventing access to unscopables
-  if (typeof Proxy === 'function') {
-    // Wrap the target in a Proxy that disallows access to some keys
-    return (safeGlobal = new Proxy(safeGlobal!, {
-      // Return a value, if it's allowed to be returned and mask this value
-      get(target, _key) {
-        const key = safeKey(target, _key);
-        return key !== undefined ? target[key] : undefined;
-      },
-      has(_target, _key) {
-        return true;
-      },
-      set: noop,
-      deleteProperty: noop,
-      defineProperty: noop,
-      getOwnPropertyDescriptor: noop,
-    }));
-  } else {
-    // NOTE: Some property accesses may leak through here without the Proxy
-    return (safeGlobal = mask(safeGlobal));
-  }
+  return freeze(safeGlobal!);
 }
 
 interface SafeFunction {
