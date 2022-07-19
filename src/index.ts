@@ -8,6 +8,7 @@ const ignore = {
   require: true,
   Function: true,
   eval: true,
+  process: true,
   module: true,
   exports: true,
   makeSafeGlobal: true,
